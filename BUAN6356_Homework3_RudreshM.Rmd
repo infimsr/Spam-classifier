@@ -1,0 +1,194 @@
+---
+title: "Homework 3"
+author: "Madhusudan Rudresh"
+date: "15 November 2018"
+output: html_document
+---
+
+# Introduction#
+A team collected data on email messages to create a classifier that can separate spam from non-spam email messages. Using this data, we will first figure out the important predictor variable that mainly affect the outcome variable. Following that, LDA model will be trained and deployed on the validation dataset. Lastly, we would evaluate the performance of this classfier using confusion matrix, lift chart and decile chart.
+
+###1.1 Identifying the important variables###
+
+First, we will import the dataset from the given URL
+
+
+```{r}
+library(data.table)
+
+spam.df <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/spambase/spambase.data", header = F)
+
+colnames(spam.df) <- c ('word_freq_make', 'word_freq_address', 'word_freq_all', 'word_freq_3d', 'word_freq_our',
+                             'word_freq_over', 'word_freq_remove', 'word_freq_internet', 'word_freq_order', 
+                             'word_freq_mail', 'word_freq_receive', 'word_freq_will', 'word_freq_people', 
+                             'word_freq_report', 'word_freq_addresses', 'word_freq_free', 'word_freq_business',
+                             'word_freq_email', 'word_freq_you', 'word_freq_credit', 'word_freq_your', 'word_freq_font',
+                             'word_freq_000', 'word_freq_money', 'word_freq_hp', 'word_freq_hpl', 'word_freq_george', 
+                             'word_freq_650', 'word_freq_lab', 'word_freq_labs', 'word_freq_telnet', 'word_freq_857', 
+                             'word_freq_data', 'word_freq_415', 'word_freq_85', 'word_freq_technology','word_freq_1999',
+                             'word_freq_parts', 'word_freq_pm', 'word_freq_direct', 'word_freq_cs', 'word_freq_meeting',
+                             'word_freq_original', 'word_freq_project', 'word_freq_re', 'word_freq_edu',
+                             'word_freq_table', 'word_freq_conference', 'char_freq_;', 'char_freq_(', 'char_freq_[', 
+                             'char_freq_!', 'char_freq_$', 'char_freq_#', 'capital_run_length_average', 
+                             'capital_run_length_longest', 'capital_run_length_total', 'spam')
+str(spam.df)
+```
+
+The spam variable is supposed to be a categorical variable which is showing numeric. Thus, we convert it into a categorical variable.
+
+```{r}
+spam.df$spam <- as.factor(spam.df$spam)
+head(spam.df)
+```
+
+Since all the variables in the dataset have different range. Thus we need to normalise the dataset.
+
+```{r}
+
+spam.df[,names(spam.df) != 'spam'] <- scale(spam.df[,names(spam.df) != 'spam'])
+
+```
+
+Creating pivot table in which mean for spam and non-spam class is calculated for all the attributes. This will condense the values into two rows which would enable us to differentiate how the each predictor variable is affecting spam and non-spam group better.
+
+```{r}
+spam.df <- as.data.table(spam.df)
+
+spam_piv1 <- as.data.frame(spam.df[,.(Mean_make = mean(word_freq_make), Mean_address = mean(word_freq_address), 
+                         Mean_all = mean(word_freq_all), Mean_3d = mean(word_freq_3d),
+                         Mean_our = mean(word_freq_our), Mean_over = mean(word_freq_over), 
+                         Mean_remove = mean(word_freq_remove), Mean_internet = mean(word_freq_internet),
+                         Mean_order = mean(word_freq_order), Mean_mail = mean(word_freq_mail), 
+                         Mean_receive = mean(word_freq_receive), Mean_will = mean(word_freq_will),
+                         Mean_people = mean(word_freq_people), Mean_report = mean(word_freq_report), 
+                         Mean_addresses = mean(word_freq_addresses), Mean_free = mean(word_freq_free),
+                         Mean_business = mean(word_freq_business), Mean_email = mean(word_freq_email), 
+                         Mean_you = mean(word_freq_you), Mean_credit = mean(word_freq_credit),
+                         Mean_your = mean(word_freq_your), Mean_font = mean(word_freq_font), 
+                         Mean_000 = mean(word_freq_000), Mean_money = mean(word_freq_money),
+                         Mean_hp = mean(word_freq_hp), Mean_hpl = mean(word_freq_hpl), 
+                         Mean_george = mean(word_freq_george), Mean_650 = mean(word_freq_650),
+                         Mean_lab = mean(word_freq_lab), Mean_labs = mean(word_freq_labs),
+                         Mean_telnet = mean(word_freq_telnet), Mean_857 = mean(word_freq_857),
+                         Mean_data = mean(word_freq_data), Mean_415 = mean(word_freq_415), 
+                         Mean_85 = mean(word_freq_85), Mean_technology = mean(word_freq_technology),
+                         Mean_1999 = mean(word_freq_1999), Mean_parts = mean(word_freq_parts), 
+                         Mean_pm = mean(word_freq_pm), Mean_direct = mean(word_freq_direct),
+                         Mean_cs = mean(word_freq_cs), Mean_meeting = mean(word_freq_meeting), 
+                         Mean_original = mean(word_freq_original), Mean_project = mean(word_freq_project),
+                         Mean_re = mean(word_freq_re), Mean_edu = mean(word_freq_edu), 
+                         Mean_table = mean(word_freq_table), Mean_conference = mean(word_freq_conference),
+                         Mean_semicolon = mean(`char_freq_;`), Mean_bracket = mean(`char_freq_(`), 
+                         Mean_sqbracket = mean(`char_freq_[`), Mean_exclamation = mean(`char_freq_!`),
+                         Mean_dollar = mean(`char_freq_$`), Mean_hash = mean(`char_freq_#`), 
+                         Mean_Capital = mean(capital_run_length_average), 
+                         Mean_longest = mean(capital_run_length_longest),
+                         Mean_total = mean(capital_run_length_total)
+),by=list(spam)])
+```
+
+Calculating the difference between the average values of predictor variables in spam and non-spam classes.
+
+```{r}
+spam.min <- apply(spam_piv1[,-1], 2, FUN = min)
+spam.max <- apply(spam_piv1[,-1], 2, FUN = max)
+difference <- spam.max - spam.min
+
+options(scipen = 999)
+difference
+```
+
+We find the top 10 predictor variables which has the highest difference between the spam and non-spam groups.
+
+```{r}
+head(sort(difference, decreasing = T),10)
+```
+
+Thus, these are the variables which has the maximum difference between spam and non-spam groups in the descending order:
+
+1. word_freq_your
+2. word_freq_000
+3. word_freq_remove
+4. char_freq_$
+5. word_freq_you
+6. word_freq_free
+7. word_freq_business
+8. word_freq_hp
+9. capital_run_length_total
+10. word_freq_our
+
+###1.2 Implementing LDA model on the dataset###
+
+Spliting the data set in to training set (80%) and validation set(20%).
+
+```{r}
+library(caret)
+set.seed(200)
+training.index <- createDataPartition(spam.df$spam, p = 0.8, list = FALSE)
+spam.train <- spam.df[training.index,]
+spam.valid <- spam.df[-training.index,]
+```
+
+Applying LDA to the training dataset and deploying it in validation dataset. Since now we know the top 10 important variables, we would train the model based on these variables and then deploy it on validation dataset.
+
+```{r}
+library(MASS)
+lda.train <- lda(spam ~ word_freq_your + word_freq_000 + word_freq_remove + `char_freq_$` + word_freq_you +
+                   word_freq_free + word_freq_business + word_freq_hp + capital_run_length_total + word_freq_our
+                   , data = spam.train) 
+pred.valid <- predict(lda.train, spam.valid)
+```
+
+
+###1.3 Evaluating the performance of the LDA model###
+
+Creating confusion matrix to calculate the accuracy of the LDA model.
+
+```{r}
+tab <- table(pred.valid$class, spam.valid$spam)
+rownames(tab) <- c("Predited Yes", "Predicted No")
+colnames(tab) <- c("Actual Yes", "Actual No")
+tab
+
+LDAaccuracy <- sum(diag(tab))/sum(tab)
+LDAaccuracy
+
+options(scipen=999)
+```
+
+We get accuracy of 82.05% using the LDA Model.
+
+Creating a data frame with values of predicted propensities and actual classification and then sorting the data based on propensity. This data would then be used to generate lift chart
+
+```{r}
+
+test <- as.data.frame(pred.valid$posterior)
+test <- cbind(test,spam.valid$spam)
+test <- test[,-1]
+colnames(test) <- c("Propensity","Actual")
+
+test <- test[order(test$Propensity, decreasing = T),]
+View(test)
+```
+
+
+Plotting lift chart to evaluate the effectiveness of the model
+```{r}
+library(gains)
+lift.example <- lift(relevel(as.factor(Actual), ref="1") ~ Propensity, data = test)
+xyplot(lift.example, plot = "gain")
+
+```
+
+We can see that this model is showing a high lift for the top 35% of the emails i.e. with high propensity. This means that this model can effectively help in classifying the spam from non-spam from top 35% of the email. Compared to random benchmark, it has a good lift and preforms better.
+
+```{r}
+test$Actual <- as.numeric(test$Actual)
+gain <- gains(test$Actual, test$Propensity)
+barplot(gain$mean.resp / mean(test$Actual), names.arg = gain$depth, xlab = "Percentile",
+        ylab = "Mean Response", main = "Decile-wise lift chart", ylim = c(0,1.6))
+
+```
+
+The intepretation on lift chart is also justified in the decile chart. 
+The intial deciles show a high mean response and gradually decreases. We can see that the mean response value being greater than 1.4 for the top 30% of the emails states that it has a better spam classification rate in that portion.
